@@ -6,6 +6,7 @@
 #include <limits>
 #include <array>
 #include <math.h>
+#include <iostream>
 
 class IObjectPool {
 public:
@@ -27,7 +28,7 @@ struct IsPowerOf2 {
     constexpr static const bool value = ((test != 0) && !(test & (test - 1)));
 };
 
-template<typename T >
+template<typename T, size_t BlockSizeInBytes>
 class ObjectPool;
 
 class Handle {
@@ -49,8 +50,8 @@ public:
     template<typename T>
 	Handle( T* data_ptr ) {
         auto ptr = reinterpret_cast<char*>(data_ptr) + sizeof(T);
-        ptr -= sizeof(typename ObjectPool<T>::Object);
-        auto obj = reinterpret_cast<typename ObjectPool<T>::Object*>(ptr);
+        ptr -= sizeof(typename ObjectPool<T, BlockSizeInBytes>::Object);
+        auto obj = reinterpret_cast<typename ObjectPool<T, BlockSizeInBytes>::Object*>(ptr);
 		mPool = obj->pool->getWeakPtr();
 		mSerialNumber = obj->serial;
 		mObject = obj;
@@ -73,7 +74,7 @@ public:
 	template<typename T>
 	inline T* get() const {
 		if (!mObject)return nullptr;
-		auto obj = static_cast<typename ObjectPool<T>::Object*>(mObject);
+		auto obj = static_cast<typename ObjectPool<T, BlockSizeInBytes>::Object*>(mObject);
 		return (mSerialNumber == obj->serial) ? &obj->data : nullptr;
 	}
 
@@ -99,8 +100,8 @@ private:
 
 
 
-template<typename T>
-class ObjectPool : public IObjectPool, public std::enable_shared_from_this<ObjectPool<T>> {
+template<typename T, size_t BlockSizeInBytes = 65536>
+class ObjectPool : public IObjectPool, public std::enable_shared_from_this<ObjectPool<T, BlockSizeInBytes>> {
 
 	struct Object {
 		//LOOKUP
@@ -116,7 +117,7 @@ class ObjectPool : public IObjectPool, public std::enable_shared_from_this<Objec
 
 public:
 
-	constexpr static const size_t BLOCK_SIZE = 65536;
+	constexpr static const size_t BLOCK_SIZE = BlockSizeInBytes;
 	constexpr static const size_t OBJECTS_PER_BLOCK = BLOCK_SIZE / sizeof(Object);
 	constexpr static const size_t OBJECT_STRIDE = sizeof(Object);
 	constexpr static const size_t MAX_BLOCKS = std::numeric_limits<IObjectPool::IndirectionBlock>::max();
@@ -125,21 +126,21 @@ public:
 private:
 
 	struct MemoryBlock {
-		MemoryBlock() : block(::operator new(BLOCK_SIZE)) { memset(block, 0, BLOCK_SIZE); }
+		MemoryBlock() : block(reinterpret_cast<Object*>(::operator new(BLOCK_SIZE))) { memset(block, 0, BLOCK_SIZE); }
 		~MemoryBlock() {
-			::operator delete(block);
+			::operator delete( reinterpret_cast<void*>(block) );
 		}
 
 		Object& operator[](size_t index) {
-			return reinterpret_cast<Object*>(block)[index];
+			return block[index];
 		}
 
-		void* block{ nullptr };
+		Object* block{ nullptr };
 	};
 
 public:
 
-	static std::shared_ptr<ObjectPool<T>> create() { return std::shared_ptr<ObjectPool<T>>(new ObjectPool<T>); }
+	static std::shared_ptr<ObjectPool<T, BlockSizeInBytes>> create() { return std::shared_ptr<ObjectPool<T, BlockSizeInBytes>>(new ObjectPool<T, BlockSizeInBytes>); }
 
 	template<typename...Args>
 	Handle createObject(Args...args) {
@@ -149,7 +150,7 @@ public:
 		IndirectionBlock block_id = floor(mBack / OBJECTS_PER_BLOCK);
 		IndirectionIndex data_index = mBack % OBJECTS_PER_BLOCK;
 
-		if (block_id > MAX_BLOCKS) {
+		if (block_id >= MAX_BLOCKS) {
 			throw std::bad_alloc();
 		} else if (block_id >= mNumBlocks) {
 			mBlocks[mNumBlocks++] = new MemoryBlock;
@@ -220,6 +221,9 @@ public:
 	void connectObjectCreationHandler(const std::function<void(const T&)>& fn) { mOnCreateHandlerfn = fn; }
 	void connectObjectDestructionHandler(const std::function<void(const T&)>& fn) { mOnDestoryHandlerfn = fn; }
 
+	void disconnectObjectCreationHandler() { mOnCreateHandlerFn = nullptr; }
+	void disconnectObjectDestructionHandler() { mOnDestroyHandlerFn = nullptr; }
+
 	~ObjectPool() { 
 		for (int i = 0; i < mNumBlocks; i++)
 			delete mBlocks[i];
@@ -231,7 +235,7 @@ private:
 		mBlocks[0] = new MemoryBlock;
 	}
 
-    std::weak_ptr<IObjectPool> getWeakPtr() override { return std::enable_shared_from_this<ObjectPool<T>>::shared_from_this(); }
+    std::weak_ptr<IObjectPool> getWeakPtr() override { return std::enable_shared_from_this<ObjectPool<T, BlockSizeInBytes>>::shared_from_this(); }
 
 	void destroyObject(void* object) override {
 

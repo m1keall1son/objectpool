@@ -10,9 +10,10 @@
 #include <assert.h>
 #include <vector>
 #include "ObjectPool.hpp"
-#include <ranlib.h>
+#include <random>
 #include <list>
 #include <algorithm>
+#include <chrono>
 
 using namespace std;
 
@@ -250,39 +251,50 @@ int main(int argc, const char * argv[]) {
         
         std::vector<Handle> handles;
         size_t bytes = 0;
-        size_t test_amt = 50000;
+        size_t test_amt = 1000;
         for (int i = 0; i < test_amt; i++) {
-            auto handle = pool->createObject(i);
-            assert(handle.isInitialized() && handle.isValid());
-            handles.push_back(handle);
-            bytes += ObjectPool<Test>::OBJECT_STRIDE;
-        }
+			Handle handle;
+			try {
+				handle = pool->createObject(i);
+				assert(handle.isInitialized() && handle.isValid());
+			}
+			catch (std::bad_alloc) {
+				cout << "reached maximum capactity: " << pool->size() << endl;
+				test_amt = pool->size();
+				break;
+			}
+			handles.push_back(handle);
+			bytes += ObjectPool<Test>::OBJECT_STRIDE;
+		}
         
         cout << "Filled " << bytes << " of " << test_amt*ObjectPool<Test>::OBJECT_STRIDE << endl;
         
         assert(pool->size() == test_amt);
         auto start = std::chrono::system_clock::now();
         
-        int destroy_amt = test_amt*.5f;
+        int destroy_amt = pool->size()*.5f;
         int skipped = 0;
         cout << "destroying " << destroy_amt << " objects" << endl;
         for (int i = 0; i < destroy_amt; i++) {
-            auto rand = randInt( handles.size() );
+            auto rand = randInt( handles.size()-1 );
             auto & handle = handles[rand];
             if (handle.isValid()) {
-                assert(handle.destroy());
+				auto res = handle.destroy();
+				assert(res);
             }else{
-               // cout << "already destroyed #" << rand << endl;
                 skipped++;
             }
         }
         
         auto finish = std::chrono::system_clock::now();
+		cout << "skipped = " << skipped << endl;
         cout << "projected pool size = " << test_amt - destroy_amt + skipped << endl;
         cout << "pool size = " << pool->size() << endl;
         cout << "time for destroying " << destroy_amt << " objects: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << endl;
         assert(pool->size() == test_amt - destroy_amt + skipped);
         
+		start = std::chrono::system_clock::now();
+
         for (int i = 0; i < destroy_amt - skipped+1; i++) {
             auto handle = pool->createObject(i);
             assert(handle.isInitialized() && handle.isValid());
@@ -290,26 +302,21 @@ int main(int argc, const char * argv[]) {
         }
         assert(pool->size() == test_amt + 1);
         
+		finish = std::chrono::system_clock::now();
+		cout << "time for re-creating " << destroy_amt << " objects: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << endl;
+
+		start = std::chrono::system_clock::now();
+
         for (auto & handle : handles) {
             handle.destroy();
         }
-        
+
+		finish = std::chrono::system_clock::now();
+		cout << "time for destroying all objects " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << endl;
+
         handles.clear();
         cout << "success!"<< endl;
     }
     
-    std::list<Test> tester(3600000/sizeof(Test), Test(0));
-    auto start = std::chrono::system_clock::now();
-    {
-        for (int i = 0; i < 25000; i++) {
-            auto rand = randInt( tester.size() );
-            auto it = tester.begin();
-            std::advance(it, rand);
-            tester.erase(it);
-        }
-    }
-    auto finish = std::chrono::system_clock::now();
-    cout << "time for destroying " << 25000 << " Test object via list: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << endl;
-
     return 0;
 }
