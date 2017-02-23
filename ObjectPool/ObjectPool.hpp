@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <array>
+#include <math.h>
 
 class IObjectPool {
 public:
@@ -20,6 +21,14 @@ public:
 	virtual void destroyObject(void*) = 0;
 
 };
+
+template<size_t test>
+struct IsPowerOf2 {
+    constexpr static const bool value = ((test != 0) && !(test & (test - 1)));
+};
+
+template<typename T >
+class ObjectPool;
 
 class Handle {
 public:
@@ -37,14 +46,14 @@ public:
 	Handle(void* object, IObjectPool::SerialNumber serial, const std::weak_ptr<IObjectPool>& pool) :mObject(object), mSerialNumber(serial), mPool(pool) {}
 
 	//created by T
-	Handle( void* data_ptr ) {
-		auto pool_ptr = reinterpret_cast<IObjectPool*>(data_ptr);
-		mPool = (--pool_ptr)->getWeakPtr();
-		auto indirection_index_ptr = reinterpret_cast<IObjectPool::IndirectionIndex*>(pool_ptr);
-		auto indirection_block_ptr = reinterpret_cast<IObjectPool::IndirectionBlock*>(--indirection_index_ptr);
-		auto serial_ptr = reinterpret_cast<IObjectPool::IndirectionBlock*>(--indirection_block_ptr);
-		mSerialNumber = *--serial_ptr;
-		mObject = serial_ptr;
+    template<typename T>
+	Handle( T* data_ptr ) {
+        auto ptr = reinterpret_cast<char*>(data_ptr) + sizeof(T);
+        ptr -= sizeof(typename ObjectPool<T>::Object);
+        auto obj = reinterpret_cast<typename ObjectPool<T>::Object*>(ptr);
+		mPool = obj->pool->getWeakPtr();
+		mSerialNumber = obj->serial;
+		mObject = obj;
 	}
 
 	bool operator==(const Handle& rhs) {
@@ -65,7 +74,7 @@ public:
 	inline T* get() const {
 		if (!mObject)return nullptr;
 		auto obj = static_cast<typename ObjectPool<T>::Object*>(mObject);
-		mSerialNumber == obj->serial ? return obj->data : return nullptr;
+		return (mSerialNumber == obj->serial) ? &obj->data : nullptr;
 	}
 
 	bool destroy() {
@@ -88,31 +97,29 @@ private:
 	std::weak_ptr<IObjectPool> mPool;
 };
 
-template<size_t test>
-struct IsPowerOf2 {
-	constexpr static const bool value = ((test != 0) && !(test & (test - 1)));
-};
 
-template<typename T, size_t blocksize = 4096, typename = std::enable_if_t< IsPowerOf2<blocksize>::value > >
-class ObjectPool : public IObjectPool, public std::enable_shared_from_this<ObjectPool<T, blocksize>> {
+
+template<typename T>
+class ObjectPool : public IObjectPool, public std::enable_shared_from_this<ObjectPool<T>> {
 
 	struct Object {
 		//LOOKUP
 		SerialNumber serial{ 0 };
-		IndirectionBlock block_id{0};
+        IndirectionBlock block_id{0};
 		IndirectionIndex data_index{0};
 		IObjectPool* pool; //used by T to create handles...don't worry, i hate this too
 		//SLOT
+        Object* lookup{nullptr};
+        char pad[7];
 		T data;
-		Object* lookup{nullptr};
 	};
 
 public:
 
-	constexpr static const size_t BLOCK_SIZE = blocksize;
+	constexpr static const size_t BLOCK_SIZE = 65536;
 	constexpr static const size_t OBJECTS_PER_BLOCK = BLOCK_SIZE / sizeof(Object);
 	constexpr static const size_t OBJECT_STRIDE = sizeof(Object);
-	constexpr static const size_t MAX_BLOCKS = std::numeric_limits<IObjectPool::IndirectionBlock>::max;
+	constexpr static const size_t MAX_BLOCKS = std::numeric_limits<IObjectPool::IndirectionBlock>::max();
 	constexpr static const size_t MAX_OBJECTS = OBJECTS_PER_BLOCK*MAX_BLOCKS;
 
 private:
@@ -132,7 +139,7 @@ private:
 
 public:
 
-	static std::shared_ptr<ObjectPool<T, blocksize>> create() { return std::shared_ptr<ObjectPool<T, blocksize>>(new ObjectPool<T, blocksize>); }
+	static std::shared_ptr<ObjectPool<T>> create() { return std::shared_ptr<ObjectPool<T>>(new ObjectPool<T>); }
 
 	template<typename...Args>
 	Handle createObject(Args...args) {
@@ -144,7 +151,7 @@ public:
 
 		if (block_id > MAX_BLOCKS) {
 			throw std::bad_alloc();
-		} else if (block_id > mNumBlocks) {
+		} else if (block_id >= mNumBlocks) {
 			mBlocks[mNumBlocks++] = new MemoryBlock;
 		}
 
@@ -182,7 +189,7 @@ public:
 
 		auto handle = Handle( lookup, lookup->serial, getWeakPtr() );
 
-		return std::move(handle);
+		return handle;
 
 	}
 
@@ -224,7 +231,7 @@ private:
 		mBlocks[0] = new MemoryBlock;
 	}
 
-	std::weak_ptr<IObjectPool> getWeakPtr() override { return shared_from_this(); }
+    std::weak_ptr<IObjectPool> getWeakPtr() override { return std::enable_shared_from_this<ObjectPool<T>>::shared_from_this(); }
 
 	void destroyObject(void* object) override {
 
