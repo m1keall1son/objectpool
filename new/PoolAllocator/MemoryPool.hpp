@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <memory>
+#include <mutex>
 //#define _DEBUG
 
 namespace mem {
@@ -17,7 +18,7 @@ namespace mem {
 
 		static MemoryPool<OBJECT_SIZE>* get() {
 			if (!sInstance)
-				sInstance.reset(new MemoryPool);
+				sInstance.reset(new MemoryPool<OBJECT_SIZE>);
 			return sInstance.get();
 		}
 
@@ -69,15 +70,16 @@ namespace mem {
 
 		void* alloc(void) {
 			// If we're out of memory chunks, grow the pool.  This is very expensive.
+
 			if (!mHead)
 			{
 				// if we don't allow resizes, return NULL
 				if (!mAllowResize)
-					return NULL;
+					return nullptr;
 
 				// attempt to grow the pool
 				if (!growMemoryArray())
-					return NULL;  // couldn't allocate anymore memory
+					return nullptr;  // couldn't allocate anymore memory
 			}
 
 #ifdef _DEBUG
@@ -90,6 +92,7 @@ namespace mem {
 			// grab the first chunk from the list and move to the next chunks
 			unsigned char* ret = mHead;
 			mHead = getNext(mHead);
+
 			return (ret + CHUNK_HEADER_SIZE);  // make sure we return a pointer to the data section only
 		}
 
@@ -99,15 +102,17 @@ namespace mem {
 				// The pointer we get back is just to the data section of the chunk.  This gets us the full chunk.
 				unsigned char* pBlock = ((unsigned char*)ptr) - CHUNK_HEADER_SIZE;
 
+				
 				// push the chunk to the front of the list
 				setNext(pBlock, mHead);
 				mHead = pBlock;
-
 #ifdef _DEBUG
 				// update allocation reports
 				--mNumAllocs;
 				//GCC_ASSERT(m_numAllocs >= 0);
 #endif
+				
+
 			}
 		}
 
@@ -248,4 +253,4 @@ namespace mem {
 }
 
 template <size_t size>
-std::shared_ptr<mem::MemoryPool<size>> mem::MemoryPool<size>::sInstance{nullptr};
+std::shared_ptr<mem::MemoryPool<size>> mem::MemoryPool<size>::sInstance;

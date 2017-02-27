@@ -16,7 +16,7 @@
 #include "Allocator.hpp"
 #include "SmallObjectPoolPolicy.hpp"
 
-const int MAX_SIZE = 1000;
+const int MAX_SIZE = 5000;
 const int MAX_ITERATIONS = 5000;
 
 class Test {
@@ -123,8 +123,8 @@ int main(int argc, const char * argv[]) {
 
 	{
 		std::list<Test, Allocator<Test, list_pool_policy<Test>>> pooled_list;
-	}
-		/*start = std::chrono::high_resolution_clock::now();
+
+		start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < MAX_ITERATIONS; j++) {
 
@@ -145,6 +145,29 @@ int main(int argc, const char * argv[]) {
 	}
 
 	std::cout << "-----------------------------" << std::endl;
-	*/
+
+	{
+		std::vector<Test, Allocator<Test, small_object_pool_policy<Test>>> pooled_vector;
+
+		start = std::chrono::high_resolution_clock::now();
+
+		for (int j = 0; j < MAX_ITERATIONS; j++) {
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				pooled_vector.emplace_back(i);
+			}
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				pooled_vector.pop_back();
+			}
+
+		}
+
+		finish = std::chrono::high_resolution_clock::now();
+
+		std::cout << "Time to alloc/free pooled vector of tests [small object]: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
+
+	}
+	
     return 0;
 }
