@@ -23,7 +23,7 @@ public:
 	};
 	
 	// Default Constructor
-	heap_policy(void){}
+	heap_policy(void) = default;
 	
 	// Copy Constructor
 	template<typename U>

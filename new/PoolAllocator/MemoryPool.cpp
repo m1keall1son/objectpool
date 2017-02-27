@@ -25,8 +25,11 @@ bool MemoryPool::Init(unsigned int chunkSize, unsigned int numChunks)
 	m_numChunks = numChunks;
 	
 	// attempt to grow the memory array
-	if (GrowMemoryArray())
+	if (GrowMemoryArray()) {
+		m_isInitialized = true;
 		return true;
+	}
+
 	return false;
 }
 
@@ -34,14 +37,16 @@ void MemoryPool::Destroy(void)
 {
 	// dump the state of the memory pool
 #ifdef _DEBUG
-	std::string str;
-	if (m_numAllocs != 0)
-		str = "***(" + std::to_string(m_numAllocs) + ") ";
-	unsigned long totalNumChunks = m_numChunks * m_memArraySize;
-	unsigned long wastedMem = (totalNumChunks - m_allocPeak) * m_chunkSize;
-	str += "Destroying memory pool: [ MemoryPool :" + std::to_string((unsigned long)m_chunkSize) + "] = " + std::to_string(m_allocPeak) + "/" + std::to_string((unsigned long)totalNumChunks) + " (" + std::to_string(wastedMem) + " bytes wasted)\n";
-	
-	std::cout << str << std::endl;
+	if (m_isInitialized) {
+		std::string str;
+		if (m_numAllocs != 0)
+			str = "***(" + std::to_string(m_numAllocs) + ") ";
+		unsigned long totalNumChunks = m_numChunks * m_memArraySize;
+		unsigned long wastedMem = (totalNumChunks - m_allocPeak) * m_chunkSize;
+		str += "Destroying memory pool: [ MemoryPool :" + std::to_string((unsigned long)m_chunkSize) + "] = " + std::to_string(m_allocPeak) + "/" + std::to_string((unsigned long)totalNumChunks) + " (" + std::to_string(wastedMem) + " bytes wasted)\n";
+
+		std::cout << str << std::endl;
+	}
 #endif
 	
 	// free all memory
@@ -109,6 +114,7 @@ void MemoryPool::Reset(void)
 	m_numChunks = 0;
 	m_memArraySize = 0;
 	m_toAllowResize = true;
+	m_isInitialized = false;
 #ifdef _DEBUG
 	m_allocPeak = 0;
 	m_numAllocs = 0;

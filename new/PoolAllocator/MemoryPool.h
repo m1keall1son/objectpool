@@ -42,7 +42,7 @@ class MemoryPool
 	unsigned int m_chunkSize, m_numChunks;  // the size of each chunk and number of chunks per array, respectively
 	unsigned int m_memArraySize;  // the number elements in the memory array
 	bool m_toAllowResize;  // true if we resize the memory pool when it fills up
-	
+	bool m_isInitialized;
 	// tracking variables we only care about for debug
 #ifdef _DEBUG
 	std::string m_debugName;
@@ -61,7 +61,7 @@ public:
 	void* Alloc(void);
 	void Free(void* pMem);
 	unsigned int GetChunkSize(void) const { return m_chunkSize; }
-	
+	bool isInitialized(void) const { return m_isInitialized; }
 	// settings
 	void SetAllowResize(bool toAllowResize) { m_toAllowResize = toAllowResize; }
 	

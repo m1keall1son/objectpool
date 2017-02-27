@@ -11,16 +11,20 @@
 #include <vector>
 #include <list>
 #include <memory>
+#include <string>
 #include <array>
+#include "AllocatorTraits.hpp"
 #include "ListPoolPolicy.hpp"
 
-using SmallObjectPoolManagerRef = std::shared_ptr<class SmallObjectPoolManager>;
-
+using SmallObjectPoolManagerRef = std::shared_ptr < class SmallObjectPoolManager > ;
 class SmallObjectPoolManager {
 	
 public:
-	
-	SmallObjectPoolManagerRef get(){
+
+	constexpr static const size_t MAX_SMALL_OBJECT_SIZE = 256;
+	constexpr static const size_t POOL_SIZE = 1024;
+
+	static SmallObjectPoolManagerRef get(){
 		if(!sInstance)
 			sInstance.reset(new SmallObjectPoolManager );
 		return sInstance;
@@ -28,61 +32,108 @@ public:
 	
 	inline void* allocate( unsigned int object_size, unsigned int count ){
 		
+		void* ret = nullptr;
+
 		if(object_size == 0)
 			return nullptr;
 		
-		if(object_size <= 256 && count == 1 ){
+		if(object_size <= MAX_SMALL_OBJECT_SIZE && count == 1 ){
 			
-			//object is correct size and only one is requested!
-			//allocate from mPools[object_size-1]
-			
-		}else if( count > 1 && object_size <= 256 && (count * object_size) <= 256 ){
-			
-			//and array was requested, size of array will fit into a pool, so lets do it!
-			//allocate from mPools[count*object_size]
-			
+			//object is correct size and only one is requested
+			return getNextAvailable(object_size);
+
 		}else{
-			
-			//use regular memory manager
-			
-			
+			//it was an array or object size was too big
+			//use heap
+			auto ptr = ::operator new(count * object_size, ::std::nothrow);
+			if (ptr) {
+				return ptr;
+			}else{
+				throw std::bad_alloc();
+			}
 		}
 		
+		return ret;
 	}
 	
-	inline void free( unsigned int object_size, void* ){
+	inline void free( unsigned int object_size, void* ptr, size_t count ){
 		
-		if(object_size > 256){
-			
-			//make sure 
-			
+		if (object_size == 0)
+			return;
+
+		if( object_size <= MAX_SMALL_OBJECT_SIZE && count == 1 ){
+			auto& pool = mPools[object_size - 1];
+			pool.Free(ptr);
 		}else{
-			
-			//we used the regular memory manager
-			
+			::operator delete(ptr);
 		}
-		
 	}
 
-	~SmallObjectPoolManager(){
-		for(auto ptr : mPoolBlocks){
-			delete ptr;
+	void initPool(unsigned int object_size) {
+		auto& pool = mPools[object_size - 1];
+		if (!pool.isInitialized()) {
+			pool.Init(object_size, POOL_SIZE);
 		}
 	}
+
+	~SmallObjectPoolManager() = default;
 	
 private:
 	
-	static SmallObjectPoolPolicyRef sInstance{nullptr};
-	
-	SmallObjectPoolManager(){ mPoolBlocks.reserve(1024); }
+	static SmallObjectPoolManagerRef sInstance;
+
+	void* getNextAvailable(unsigned int object_size){
+		auto& pool = mPools[object_size-1];
+		if (!pool.isInitialized()) {
+			pool.Init(object_size, POOL_SIZE);
+		}
+		return pool.Alloc();
+	}
+
+	SmallObjectPoolManager() = default;
 		
-	std::array< std::list< void*, list_pool_policy<void*> >, 256 > mPools;
-	std::vector<void*> mPoolBlocks;
-	std::unordered_map<void*, unsigned int>
+	std::array< MemoryPool, MAX_SMALL_OBJECT_SIZE > mPools;
 	
 };
 
+SmallObjectPoolManagerRef SmallObjectPoolManager::sInstance{nullptr};
 
-SmallObjectPoolPolicyRef SmallObjectPoolManager::sInstance;
 
+template<typename T>
+class small_object_pool_policy
+{
+public:
 
+	ALLOCATOR_TRAITS(T)
+
+	template<typename U>
+	struct rebind
+	{
+		typedef small_object_pool_policy<U> other;
+	};
+
+	// Default Constructor
+	small_object_pool_policy() {
+		SmallObjectPoolManager::get()->initPool(sizeof(T));
+	}
+
+	// Copy Constructor
+	template<typename U>
+	small_object_pool_policy(small_object_pool_policy<U> const& other) {}
+
+	// Allocate memory
+	pointer allocate(size_type count, const_pointer hint = 0)
+	{
+		if (count > max_size()) { throw std::bad_alloc(); }
+		return reinterpret_cast<pointer>( SmallObjectPoolManager::get()->allocate( sizeof(T), count ) );
+	}
+
+	// Delete memory
+	void deallocate(pointer ptr, size_type count)
+	{
+		SmallObjectPoolManager::get()->free(sizeof(T), ptr, count);
+	}
+
+	// Max number of objects that can be allocated in one call
+	size_type max_size(void) const { return max_allocations<T>::value; }
+};

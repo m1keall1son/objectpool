@@ -30,9 +30,9 @@ public:
 	};
 	
 	// Default Constructor
-	list_pool_policy( unsigned int numChunks = 1024 ){
+	list_pool_policy(){
 		mPool.reset(new MemoryPool);
-		mPool->Init(sizeof(T), numChunks);
+		mPool->Init(sizeof(T), 1024);
 	}
 	
 	// Copy Constructor
@@ -49,6 +49,7 @@ public:
 	// Allocate memory
 	pointer allocate(size_type count, const_pointer hint = 0)
 	{
+
 		if(count == 1)
 			return reinterpret_cast<pointer>(mPool->Alloc());
 		else

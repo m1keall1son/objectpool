@@ -14,8 +14,9 @@
 
 #include "ListPoolPolicy.hpp"
 #include "Allocator.hpp"
+#include "SmallObjectPoolPolicy.hpp"
 
-const int MAX_SIZE = 5000;
+const int MAX_SIZE = 1000;
 const int MAX_ITERATIONS = 5000;
 
 class Test {
@@ -39,7 +40,6 @@ private:
 	int mVal;
 	int mAnother;
 	float mYetAnother;
-	char stuff[36];
 };
 
 class Thing {
@@ -71,7 +71,7 @@ int main(int argc, const char * argv[]) {
 	auto finish = std::chrono::high_resolution_clock::now();
 	
 	{
-		std::vector<Test, Allocator<Test, heap_policy<Test>>> regular_list;
+		std::list<Test, Allocator<Test, heap_policy<Test>>> regular_list;
 		
 		start = std::chrono::high_resolution_clock::now();
 		
@@ -82,21 +82,21 @@ int main(int argc, const char * argv[]) {
 			}
 			
 			for(int i = 0; i < MAX_SIZE; i++){
-				regular_list.pop_back();
+				regular_list.pop_front();
 			}
 			
 		}
 		
 		finish = std::chrono::high_resolution_clock::now();
 		
-		std::cout << "Time to alloc/free regular list: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
+		std::cout << "Time to alloc/free regular list of tests: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
 		
 	}
 	
 	std::cout << "-----------------------------" << std::endl;
 	
 	{
-		std::list<Test, Allocator<Test, list_pool_policy<Test>>> pooled_list;
+		std::list<Test, Allocator<Test, small_object_pool_policy<Test>>> pooled_list;
 		
 		start = std::chrono::high_resolution_clock::now();
 		
@@ -114,10 +114,66 @@ int main(int argc, const char * argv[]) {
 		
 		finish = std::chrono::high_resolution_clock::now();
 		
-		std::cout << "Time to alloc/free pooled list: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
+		std::cout << "Time to alloc/free pooled list of tests: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
 		
 	}
 	
+	std::cout << "-----------------------------" << std::endl;
+
+	{
+		std::list<Thing, Allocator<Thing, heap_policy<Thing>>> regular_list;
+
+		start = std::chrono::high_resolution_clock::now();
+
+		for (int j = 0; j < MAX_ITERATIONS; j++) {
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				regular_list.emplace_back(i);
+			}
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				regular_list.pop_front();
+			}
+
+		}
+
+		finish = std::chrono::high_resolution_clock::now();
+
+		std::cout << "Time to alloc/free regular list of things: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
+
+	}
+
+	std::cout << "-----------------------------" << std::endl;
+
+	{
+		std::list<Thing, Allocator<Thing, small_object_pool_policy<Thing>>> pooled_list;
+
+		start = std::chrono::high_resolution_clock::now();
+
+		for (int j = 0; j < MAX_ITERATIONS; j++) {
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				pooled_list.emplace_back(i);
+			}
+
+			for (int i = 0; i < MAX_SIZE; i++) {
+				pooled_list.pop_front();
+			}
+
+		}
+
+		finish = std::chrono::high_resolution_clock::now();
+
+		std::cout << "Time to alloc/free pooled list of things: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
+
+	}
+
+	std::cout << "-----------------------------" << std::endl;
+
+	{
+		std::vector<Thing, Allocator<Thing, small_object_pool_policy<Thing>>> pooled_vector(1000, Thing(0));
+	}
+
 	std::cout << "-----------------------------" << std::endl;
 
     return 0;
