@@ -32,7 +32,7 @@
 // will cause the chunk to the inserted to the front of the list, ready for the next bit.
 //--------------------------------------------------------------------------------------------------
 #include <iostream>
-#define _DEBUG
+//#define _DEBUG
 
 
 class MemoryPool

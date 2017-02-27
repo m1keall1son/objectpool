@@ -114,41 +114,17 @@ int main(int argc, const char * argv[]) {
 		
 		finish = std::chrono::high_resolution_clock::now();
 		
-		std::cout << "Time to alloc/free pooled list of tests: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
+		std::cout << "Time to alloc/free pooled list of tests [small object]: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()  << "ms" << std::endl;
 		
 	}
+	
 	
 	std::cout << "-----------------------------" << std::endl;
 
 	{
-		std::list<Thing, Allocator<Thing, heap_policy<Thing>>> regular_list;
-
-		start = std::chrono::high_resolution_clock::now();
-
-		for (int j = 0; j < MAX_ITERATIONS; j++) {
-
-			for (int i = 0; i < MAX_SIZE; i++) {
-				regular_list.emplace_back(i);
-			}
-
-			for (int i = 0; i < MAX_SIZE; i++) {
-				regular_list.pop_front();
-			}
-
-		}
-
-		finish = std::chrono::high_resolution_clock::now();
-
-		std::cout << "Time to alloc/free regular list of things: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
-
+		std::list<Test, Allocator<Test, list_pool_policy<Test>>> pooled_list;
 	}
-
-	std::cout << "-----------------------------" << std::endl;
-
-	{
-		std::list<Thing, Allocator<Thing, small_object_pool_policy<Thing>>> pooled_list;
-
-		start = std::chrono::high_resolution_clock::now();
+		/*start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < MAX_ITERATIONS; j++) {
 
@@ -164,17 +140,11 @@ int main(int argc, const char * argv[]) {
 
 		finish = std::chrono::high_resolution_clock::now();
 
-		std::cout << "Time to alloc/free pooled list of things: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
+		std::cout << "Time to alloc/free pooled list of tests [list]: " << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms" << std::endl;
 
 	}
 
 	std::cout << "-----------------------------" << std::endl;
-
-	{
-		std::vector<Thing, Allocator<Thing, small_object_pool_policy<Thing>>> pooled_vector(1000, Thing(0));
-	}
-
-	std::cout << "-----------------------------" << std::endl;
-
+	*/
     return 0;
 }

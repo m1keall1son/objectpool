@@ -14,7 +14,7 @@
 #include <string>
 #include <array>
 #include "AllocatorTraits.hpp"
-#include "ListPoolPolicy.hpp"
+#include "MemoryPool.h"
 
 using SmallObjectPoolManagerRef = std::shared_ptr < class SmallObjectPoolManager > ;
 class SmallObjectPoolManager {

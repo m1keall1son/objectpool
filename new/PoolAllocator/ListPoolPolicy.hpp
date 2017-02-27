@@ -8,7 +8,7 @@
 
 #pragma once
 #include <exception>
-#include "MemoryPool.h"
+#include "MemoryPool.hpp"
 #include "AllocatorTraits.hpp"
 #include "Allocator.hpp"
 #include <memory>
@@ -18,9 +18,7 @@ template<typename T>
 class list_pool_policy
 {
 public:
-	
-	std::shared_ptr<MemoryPool> mPool;
-	
+		
 	ALLOCATOR_TRAITS(T)
 	
 	template<typename U>
@@ -31,27 +29,21 @@ public:
 	
 	// Default Constructor
 	list_pool_policy(){
-		mPool.reset(new MemoryPool);
-		mPool->Init(sizeof(T), 1024);
+		mem::MemoryPool<sizeof(T)>::get();
 	}
 	
 	// Copy Constructor
 	template<typename U>
 	list_pool_policy(list_pool_policy<U> const& other){
-		if(sizeof(U)!=sizeof(T)){
-			mPool.reset( new MemoryPool );
-			mPool->Init(sizeof(T), 1024);
-		}else{
-			mPool = other.mPool;
-		}
+		mem::MemoryPool<sizeof(T)>::get();
 	}
 	
 	// Allocate memory
 	pointer allocate(size_type count, const_pointer hint = 0)
 	{
 
-		if(count == 1)
-			return reinterpret_cast<pointer>(mPool->Alloc());
+		if (count == 1)
+			return reinterpret_cast<pointer>(mem::MemoryPool<sizeof(T)>::get()->alloc());
 		else
 		{
 			throw std::runtime_error("pool can only do one at a time");
@@ -61,8 +53,8 @@ public:
 	// Delete memory
 	void deallocate(pointer ptr, size_type count )
 	{
-		if(count == 1)
-			mPool->Free(ptr);
+		if (count == 1) 
+			mem::MemoryPool<sizeof(T)>::get()->free(ptr);
 		else
 		{
 			throw std::runtime_error("pool can only do one at a time");
