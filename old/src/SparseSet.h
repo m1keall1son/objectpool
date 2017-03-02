@@ -29,15 +29,14 @@ struct Handle {
 	HandleSizeType slot_serial : SLOT_SERIAL_BITS;
 	HandleSizeType slot_index : SLOT_INDEX_BITS;
 
-	inline operator HandleSizeType() const;
+	//explicit conversion
+	inline operator HandleSizeType() const {
+		return pool_id << POOL_INDEX_BITS | slot_serial << SLOT_SERIAL_BITS | slot_index;
+	}
 
 	bool isSet() { return ((pool_id << POOL_INDEX_BITS | slot_serial << SLOT_SERIAL_BITS | slot_index) != std::numeric_limits<uint64_t>::max()); }
 	void reset() { pool_id = -1; slot_serial = -1; slot_index = -1; }
 };
-
-Handle::operator HandleSizeType() const{
-	return pool_id << sizeof(PoolIdType) | slot_serial << sizeof(SlotSerialIdType) | slot_index;
-}
 
 class IMemoryPolicy {
 public:
@@ -51,6 +50,9 @@ template<typename T>
 class UnorderdSparseSet : public IMemoryPolicy {
 
 public:
+
+	using iterator = std::vector<T>::iterator;
+	using const_iterator = std::vector<T>::const_iterator;
 
 	template<typename...Args>
 	Handle alloc(Args&&...args) {
@@ -71,11 +73,11 @@ public:
 
 	size_t size() const override { return mBack; }
 
-	std::vector<T>::iterator begin() { return mData.begin(); }
-	std::vector<T>::iterator end() { auto end = mData.begin(); std::advance(end, mBack); return end; }
+	iterator begin() { return mData.begin(); }
+	iterator end() { auto end = mData.begin(); std::advance(end, mBack); return end; }
 
-	std::vector<T>::const_iterator cbegin() { return mData.cbegin(); }
-	std::vector<T>::const_iterator cend() { auto cend = mData.cbegin(); std::advance(cend, mBack); return cend; }
+	const_iterator cbegin() { return mData.cbegin(); }
+	const_iterator cend() { auto cend = mData.cbegin(); std::advance(cend, mBack); return cend; }
 
 	void reserve(size_t count)override {
 		mData.resize(count);
@@ -86,9 +88,9 @@ public:
 private:
 
 	size_t mBack{0};
-	std::vector<std::pair<SlotIndexType, SlotSerialIdType>> mSparse;
-	std::vector<SlotIndexType> mDense;
-
-	std::pair<SlotIndexType, SlotSerialIdType>* mFreeSparseList;
+	std::vector<SparseSlotIndex> mSparse;
+	std::vector<DenseSlotIndex> mDense;
+	SparseSlotIndex* mFreeSparseList;
 	std::vector<T, Allocator<T, heap_policy<T>, disabled_construction_destruction_object_traits<T>>> mData;
+
 };
